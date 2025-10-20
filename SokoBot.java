@@ -1,10 +1,10 @@
 package solver;
 
 import java.awt.Point;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.PriorityQueue;
 import java.util.Comparator;
+import java.util.HashSet;
+import java.util.PriorityQueue;
+import java.util.Set;
 
 public class SokoBot {
 
@@ -63,7 +63,7 @@ public class SokoBot {
       State current = open.poll();
 
       // unique key to detect repeated states
-      String key = current.player.x + "," + current.player.y + current.boxes.toString();
+      String key = makeKey(current.player, current.boxes);
       if (visited.contains(key))
         continue;
       visited.add(key);
@@ -105,11 +105,13 @@ public class SokoBot {
       // Blocked by wall or another box
       if (mapData[boxNew.y][boxNew.x] == '#' || newBoxes.contains(boxNew))
         return null;
-
       //move the box
       newBoxes.remove(newPlayer);
       newBoxes.add(boxNew);
     }
+
+    if (isDeadlocked(newBoxes, mapData))
+      return null;
 
     //return new state
     return new State(newPlayer, newBoxes, current.path + move, current.cost + 1, heuristic(newBoxes, targets));
@@ -128,5 +130,33 @@ public class SokoBot {
       total += best;
     }
     return total;
+  }
+
+  //checking if a corner is dead position
+  private boolean isDeadlocked(Set<Point> boxes, char[][] map) {
+    for (Point b : boxes) {
+        if (map[b.y][b.x] == '.') continue; // target = okay
+
+        boolean wallLeft = (map[b.y][b.x - 1] == '#');
+        boolean wallRight = (map[b.y][b.x + 1] == '#');
+        boolean wallUp = (map[b.y - 1][b.x] == '#');
+        boolean wallDown = (map[b.y + 1][b.x] == '#');
+
+        // box in a corner not on target
+        if ((wallLeft && wallUp) || (wallLeft && wallDown) || 
+            (wallRight && wallUp) || (wallRight && wallDown))
+            return true;
+    }
+    return false;
+  }
+
+  //makes a key for every state and is stored in a string to avoid duplicates
+  private String makeKey(Point player, Set<Point> boxes) {
+    StringBuilder sb = new StringBuilder();
+    sb.append(player.x).append(',').append(player.y).append('|');
+    boxes.stream()
+        .sorted((a, b) -> a.x == b.x ? a.y - b.y : a.x - b.x)
+        .forEach(p -> sb.append(p.x).append(',').append(p.y).append(';'));
+    return sb.toString();
   }
 }
