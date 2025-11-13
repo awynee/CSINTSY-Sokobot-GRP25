@@ -13,35 +13,36 @@ DATA_PATH = "dataset.csv"
 MODEL_OUT = "pinoybot_model.pkl"
 
 # Feature extraction
-def extract_numeric_features(word: str):
+def extractNumericFeatures(word: str):
     vowels = set("aeiouAEIOU")
     w = word if isinstance(word, str) else ""
     w_lower = w.lower()
-    prefixes_fil = ['mag', 'nag', 'pin', 'pa', 'ka', 'i', 'in', 'um']
-    prefixes_eng = ['un', 're', 'pre', 'dis', 'mis', 'non']
-    suffixes_eng = ['ness', 'ship', 'able', 'ment', 'tion', 'ing', 'ed', 'ly']
+    # add more prefixes, suffixes if there are more common ones but not too many
+    prefixes_fil = ['mag', 'nag', 'pin', 'pa', 'ka', 'i', 'in', 'um', 'ma', 'na']
+    prefixes_eng = ['un', 're', 'pre', 'dis', 'mis', 'non', 'an']
+    suffixes_eng = ['ness', 'ship', 'able', 'ment', 'tion', 'ing', 'ed', 'ly', 'ify', 'ance','ence', 'ible'] 
 
     features = {
-        'word_len': len(w),
-        'num_vowels': sum(1 for ch in w if ch in vowels),
-        'ratio_vowel': sum(1 for ch in w if ch in vowels)/len(w) if len(w) > 0 else 0.0,
-        'num_consonants': sum(1 for ch in w if ch.isalpha() and ch.lower() not in vowels),
-        'is_capitalized': int(w[0].isupper()) if len(w) > 0 else 0,
-        'is_proper_noun': int(w.istitle()),
-        'has_digit': int(any(ch.isdigit() for ch in w)),
-        'has_mixed_alnum': int(any(ch.isdigit() for ch in w) and any(ch.isalpha() for ch in w)),
-        'has_hyphen': int('-' in w),
-        'ends_with_vowel': int(len(w) > 0 and w[-1] in vowels),
-        'ends_with_consonant': int(len(w) > 0 and w[-1].isalpha() and w[-1].lower() not in vowels),
-        'has_prefix_fil': int(any(w_lower.startswith(p) for p in prefixes_fil)),
-        'has_prefix_eng': int(any(w_lower.startswith(p) for p in prefixes_eng)),
-        'has_suffix_eng': int(any(w_lower.endswith(s) for s in suffixes_eng)),
-        'num_nonalpha': sum(1 for ch in w if not ch.isalpha())
+        'wordLength': len(w),
+        'vowelCount': sum(1 for ch in w if ch in vowels),
+        'vowelRatio': sum(1 for ch in w if ch in vowels)/len(w) if len(w) > 0 else 0.0,
+        'consnantCount': sum(1 for ch in w if ch.isalpha() and ch.lower() not in vowels),
+        'isCapitalized': int(w[0].isupper()) if len(w) > 0 else 0,
+        'isPropNoun': int(w.istitle()),
+        'hasDigits': int(any(ch.isdigit() for ch in w)),
+        'hasMixedString': int(any(ch.isdigit() for ch in w) and any(ch.isalpha() for ch in w)),
+        'hasHyphen': int('-' in w),
+        'endingVowel': int(len(w) > 0 and w[-1] in vowels),
+        'endingConsonant': int(len(w) > 0 and w[-1].isalpha() and w[-1].lower() not in vowels),
+        'hasPrefixFil': int(any(w_lower.startswith(p) for p in prefixes_fil)),
+        'hasPrefixEng': int(any(w_lower.startswith(p) for p in prefixes_eng)),
+        'hasSuffixEng': int(any(w_lower.endswith(s) for s in suffixes_eng)),
+        'numNonAlpha': sum(1 for ch in w if not ch.isalpha())
     }
     return features
 
 # Label normalization
-def normalize_label(raw_label: str) -> str:
+def normalizeLabel(raw_label: str) -> str:
     if not isinstance(raw_label, str):
         return "OTH"
     lab = raw_label.strip().lower()
@@ -58,31 +59,31 @@ def main():
     df = pd.read_csv(DATA_PATH)
     df.columns = [c.strip().lower() for c in df.columns]
     if 'word' not in df.columns or 'label' not in df.columns:
-        raise ValueError("'word' and 'label' not found in columns")
+        raise ValueError("'word' and 'label' not found in the given columns")
 
-    df['label_norm'] = df['label'].apply(normalize_label)
+    df['normedLabel'] = df['label'].apply(normalizeLabel)
     print("Label distribution:")
-    print(df['label_norm'].value_counts())
+    print(df['normedLabel'].value_counts())
 
     #extracting numeric features
-    X_numeric = [extract_numeric_features(w) for w in df['word']]
-    X_numeric_sparse = sparse.csr_matrix([list(d.values()) for d in X_numeric])
-    numeric_feature_names = list(X_numeric[0].keys())
+    X_num = [extractNumericFeatures(w) for w in df['word']]
+    X_numSparse = sparse.csr_matrix([list(d.values()) for d in X_num])
+    num_featureNames = list(X_num[0].keys())
 
     # extracting character n-grams
     vectorizer = CountVectorizer(analyzer='char_wb', ngram_range=(2,4), lowercase=True)
-    char_ngrams = vectorizer.fit_transform(df['word'].astype(str))
+    charNgrams = vectorizer.fit_transform(df['word'].astype(str))
 
     # combining extractions
-    X_combined = sparse.hstack([X_numeric_sparse, char_ngrams])
-    feature_names = numeric_feature_names + vectorizer.get_feature_names_out().tolist()
+    X_combined = sparse.hstack([X_numSparse, charNgrams])
+    featureNames = num_featureNames + vectorizer.get_feature_names_out().tolist()
 
     # encoding labels
     le = LabelEncoder()
-    y = le.fit_transform(df['label_norm'])
+    y = le.fit_transform(df['normedLabel'])
     print("Label classes:", le.classes_)
 
-    # splitting dataset
+    # splitting dataset to 70-15-15
     X_train, X_temp, y_train, y_temp = train_test_split(
         X_combined, y, test_size=0.3, random_state=RANDOM_STATE, stratify=y
     )
@@ -104,21 +105,20 @@ def main():
     # evaluation function
     def evaluate(X_eval, y_eval, set_name):
         y_pred = clf.predict(X_eval)
-        unique_labels = sorted(set(y_eval))
-        target_names = [le.classes_[i] for i in unique_labels]
+        uniqueLabels = sorted(set(y_eval))
+        targetNames = [le.classes_[i] for i in uniqueLabels]
         print(f"\n--- {set_name} set performance ---")
         print("Accuracy:", accuracy_score(y_eval, y_pred))
-        print(classification_report(y_eval, y_pred, labels=unique_labels, target_names=target_names))
+        print(classification_report(y_eval, y_pred, labels= uniqueLabels, target_names = targetNames))
 
     evaluate(X_val, y_val, "Validation")
     evaluate(X_test, y_test, "Test")
 
-    # save model
     joblib.dump({
         'model': clf,
         'label_encoder': le,
         'char_vectorizer': vectorizer,
-        'numeric_feature_names': numeric_feature_names
+        'num_featureNames': num_featureNames
     }, MODEL_OUT)
     print(f"\nSaved model to {MODEL_OUT}")
 
