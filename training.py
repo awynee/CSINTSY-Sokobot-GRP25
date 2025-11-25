@@ -39,6 +39,12 @@ def train_bot(cat_name, render: int = -1):
     # training process such as learning rate, exploration rate, etc.            #
     #############################################################################
     
+    # Environment settings
+    max_bot_pos = 100
+    max_cat_pos = 100
+    max_velocity_states = 5
+    num_actions = env.action_space.n
+
     learnRate = 0.1 #default rate but can be changed
     discFactor = 0.99 
     exploreRate = 1 #how often the bot tries random actions
@@ -63,34 +69,42 @@ def train_bot(cat_name, render: int = -1):
         # 5. Update the Q-table accordingly based on agent's rewards.                #
         ############################################################################## 
                
+        # Inside your training loop
         state, _ = env.reset()
         done = False
+        prev_catPos = state % 100  # store initial cat position
 
         while not done:
-            #how to decide wether to explore or exploit
+            botPos = state // 100
+            catPos = state % 100
+            
+            # Compute velocity dynamically
+            catVel = np.clip(catPos - prev_catPos + 2, 0, 4)  # shift to range 0-4
+            prev_catPos = catPos  # update for next step
+
+            # Decide whether to explore or exploit
             if random.random() < exploreRate:
-                action = env.action_space.sample() #lets the bot explore 
+                action = env.action_space.sample()
             else:
-                action = np.argmax(q_table[state]) #lets the bot use what its learned
-        
+                action = np.argmax(q_table[state])  # still use your existing Q-table
+
+            # Take action
             next_state, _, terminated, truncated, _ = env.step(action)
             done = terminated or truncated
 
-            reward = -1  #penalty per move
-
-            botPos = state // 100
-            catPos = state % 100
-            if botPos == catPos:
+            # Reward logic
+            reward = -1
+            nextBotPos = next_state // 100
+            nextCatPos = next_state % 100
+            if nextBotPos == nextCatPos:
                 reward = 100
 
+            # Q-learning update
             old_value = q_table[state][action]
             next_max = np.max(q_table[next_state])
             q_table[state][action] = old_value + learnRate * (reward + discFactor * next_max - old_value)
 
             state = next_state
-
-        exploreRate = max(minEpsilon, exploreRate * epsilonDecay)
-
 
         #############################################################################
         # END OF YOUR CODE. DO NOT MODIFY ANYTHING BEYOND THIS LINE.                #
