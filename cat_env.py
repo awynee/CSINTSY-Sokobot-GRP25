@@ -333,6 +333,155 @@ class WayneCat(Cat):
             new_pos = random.choice(possible_positions)
             self.pos[0], self.pos[1] = new_pos
 
+    """A highly advanced, unpredictable, reactive cat for stress-testing Q-learning."""
+    
+    def _get_sprite_path(self) -> str:
+        return "images/trainer-dp.png"   # reuse trainer image unless you add your own
+    
+    def move(self) -> None:
+        r, c = self.pos
+        pr, pc = self.player_pos
+        dist = abs(r - pr) + abs(c - pc)
+
+        # -------------------------
+        # 1. TELEPORT IF TOO CLOSE
+        # -------------------------
+        if dist <= 1 and random.random() < 0.40:
+            edge = []
+            for i in range(self.grid_size):
+                edge.extend([
+                    (0, i),
+                    (self.grid_size - 1, i),
+                    (i, 0),
+                    (i, self.grid_size - 1)
+                ])
+            
+            far_tiles = sorted(
+                edge, key=lambda x: abs(x[0] - pr) + abs(x[1] - pc),
+                reverse=True
+            )
+            self.pos = np.array(far_tiles[0])
+            return
+
+        # -------------------------
+        # 2. MIRROR / ANTI-MIRROR
+        # -------------------------
+        if random.random() < 0.25:
+            if self.last_player_action == 0:    # player moved up
+                r = min(self.grid_size - 1, r + 1)
+            elif self.last_player_action == 1:  # player moved down
+                r = max(0, r - 1)
+            elif self.last_player_action == 2:  # left
+                c = min(self.grid_size - 1, c + 1)
+            elif self.last_player_action == 3:  # right
+                c = max(0, c - 1)
+            self.pos = np.array([r, c])
+            return
+
+        # -------------------------
+        # 3. BAIT THE PLAYER
+        # -------------------------
+        if random.random() < 0.15:
+            step = [0, 0]
+            if pr > r: step[0] = 1
+            elif pr < r: step[0] = -1
+            if pc > c: step[1] = 1
+            elif pc < c: step[1] = -1
+
+            nr = min(max(0, r + step[0]), self.grid_size - 1)
+            nc = min(max(0, c + step[1]), self.grid_size - 1)
+            self.pos = np.array([nr, nc])
+            return
+
+        # -------------------------
+        # 4. NORMAL EVASION (FARTHEST TILE)
+        # -------------------------
+        best_move = None
+        best_dist = -1
+        for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+            nr = min(max(0, r + dr), self.grid_size - 1)
+            nc = min(max(0, c + dc), self.grid_size - 1)
+
+            d = abs(nr - pr) + abs(nc - pc)
+            if d > best_dist:
+                best_dist = d
+                best_move = (nr, nc)
+
+        self.pos = np.array(best_move)
+
+
+class GreenCat(Cat):
+
+    def _get_sprite_path(self) -> str:
+        return "images/trainer-dp.png"  
+
+    def move(self) -> None:
+        r, c = self.pos
+        pr, pc = self.player_pos
+        dist = abs(r - pr) + abs(c - pc)
+
+        if dist <= 1 and random.random() < 0.40:
+            edge_tiles = []
+            for i in range(self.grid_size):
+                edge_tiles.extend([
+                    (0, i),
+                    (self.grid_size - 1, i),
+                    (i, 0),
+                    (i, self.grid_size - 1)
+                ])
+
+            edge_tiles = list(set(edge_tiles))
+            farthest = sorted(
+                edge_tiles,
+                key=lambda p: abs(p[0] - pr) + abs(p[1] - pc),
+                reverse=True
+            )[0]
+
+            self.pos = np.array(farthest)
+            return
+
+        if random.random() < 0.25:
+            nr, nc = r, c
+
+            if self.last_player_action == 0:    
+                nr = min(self.grid_size - 1, r + 1)
+            elif self.last_player_action == 1:  
+                nr = max(0, r - 1)
+            elif self.last_player_action == 2:   
+                nc = min(self.grid_size - 1, c + 1)
+            elif self.last_player_action == 3:  
+                nc = max(0, c - 1)
+
+            self.pos = np.array([nr, nc])
+            return
+
+        if random.random() < 0.15:
+            step_r = 1 if pr > r else -1 if pr < r else 0
+            step_c = 1 if pc > c else -1 if pc < c else 0
+
+            nr = min(max(0, r + step_r), self.grid_size - 1)
+            nc = min(max(0, c + step_c), self.grid_size - 1)
+
+            self.pos = np.array([nr, nc])
+            return
+
+        best_move = None
+        farthest_dist = -1
+
+        for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+            nr = min(max(0, r + dr), self.grid_size - 1)
+            nc = min(max(0, c + dc), self.grid_size - 1)
+
+            d = abs(nr - pr) + abs(nc - pc)
+
+            if d > farthest_dist:
+                farthest_dist = d
+                best_move = (nr, nc)
+
+        if best_move:
+            self.pos = np.array(best_move)
+
+
 #######################################
 # END OF CAT BEHAVIOR IMPLEMENTATIONS #
 #######################################
@@ -386,7 +535,8 @@ class CatChaseEnv(gym.Env):
             "squiddyboi": SquiddyboiCat,
             "trainer": TrainerCat,
             "erratic" : ErraticCat,
-            "wayne" : WayneCat
+            "wayne" : WayneCat,
+            "green": GreenCat,
         }
         if cat_type not in cat_types:
             raise ValueError(f"Unknown cat type: {cat_type}. Available types: {list(cat_types.keys())}")
